@@ -1,6 +1,7 @@
 # pulse
 
-Protocol for synchronizing multiple clients. It has the following characteristics:
+Protocol for synchronizing multiple clients. In some contexts its known as `blind sync protocol` or `convergent eventual consistency`.
+It has the following characteristics:
 - aimed at scenarios where the goal is to make all the clients appear to share a monotonic clock,
 the primary usecase for creating it was to synchronize audio-devices like sequencers, drum machines, synths - ie things you might otherwise use midi-cables for.
 - the clients don't need to communicate among themselves or know about each other
