@@ -1,6 +1,6 @@
 # pulse
 
-Protocol for synchronizing multiple clients. Similar to `blind sync protocol` and `convergent eventual consistency`.
+Protocol for synchronizing multiple clients. Similar to `blind sync` protocols and `convergent eventual consistency`.
 It has the following characteristics:
 - aimed at scenarios where the goal is to make all the clients appear to share a monotonic clock,
 the primary usecase for creating it was to synchronize audio-devices like sequencers, drum machines, synths - ie things you might otherwise use midi-cables for.
