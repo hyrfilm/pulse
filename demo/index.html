@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pulse Sync Demo</title>
+    <!-- TODO: Either break out this styling or use something like tailwind or whatever -->
+    <style>
+      :root {
+        --bg: #0b1220;
+        --fg: #ecf2ff;
+        --muted: #9ba9c1;
+        --good: #3fb950;
+        --bad: #f85149;
+        --card: #141f33;
+        --border: #2b3a57;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        background: radial-gradient(circle at top, #14233a 0%, var(--bg) 70%);
+        color: var(--fg);
+        min-height: 100vh;
+      }
+      .wrap {
+        max-width: 980px;
+        margin: 24px auto;
+        padding: 0 16px 24px;
+      }
+      .card {
+        background: color-mix(in hsl, var(--card) 92%, black 8%);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 20px;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .pill {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 6px 10px;
+      }
+      .ok {
+        color: var(--good);
+      }
+      .no {
+        color: var(--bad);
+      }
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+      }
+      .sync-indicator {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+      .sync-dot {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--bad);
+        transition: background 0.2s;
+        flex-shrink: 0;
+      }
+      .sync-dot.locked {
+        background: var(--good);
+      }
+      .sync-dot.flash {
+        animation: dot-flash 0.12s ease-out;
+      }
+      @keyframes dot-flash {
+        0% {
+          filter: brightness(2.5);
+        }
+        100% {
+          filter: brightness(1);
+        }
+      }
+      .sync-label {
+        font-size: 15px;
+        color: var(--muted);
+      }
+      .sync-label strong {
+        color: var(--fg);
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+      }
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+      .field label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .field input {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #0f1828;
+        color: var(--fg);
+        padding: 8px;
+      }
+      .field .hint {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .field .hint.error {
+        color: var(--bad);
+      }
+      .field.checkbox {
+        align-self: end;
+      }
+      .field.checkbox label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--fg);
+      }
+      .field.checkbox input {
+        width: auto;
+      }
+      .sync-view {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+      }
+      .sync-view[hidden] {
+        display: none;
+      }
+      .leader {
+        position: relative;
+        width: min(74vmin, 520px);
+        aspect-ratio: 1;
+        display: grid;
+        place-items: center;
+      }
+      .leader-ring {
+        position: absolute;
+        inset: 0;
+        border: min(1.7vmin, 10px) solid #fff;
+        border-radius: 50%;
+        opacity: 0.95;
+      }
+      .leader-ring.inner {
+        inset: 22%;
+        border-width: min(1vmin, 6px);
+        opacity: 0.8;
+      }
+      .leader-crosshair {
+        position: absolute;
+        inset: min(1.7vmin, 10px);
+        border-radius: 50%;
+        overflow: hidden;
+      }
+      .leader-axis {
+        position: absolute;
+        background: #fff;
+        opacity: 0.95;
+      }
+      .leader-axis.v {
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        width: min(0.65vmin, 4px);
+        transform: translateX(-50%);
+      }
+      .leader-axis.h {
+        left: 0;
+        right: 0;
+        top: 50%;
+        height: min(0.65vmin, 4px);
+        transform: translateY(-50%);
+      }
+      .leader-hand {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: min(1.2vmin, 7px);
+        height: 47%;
+        background: #fff;
+        border-radius: 999px;
+        transform-origin: 50% 100%;
+        transform: translate(-50%, -100%) rotate(0deg);
+      }
+      .leader-center {
+        position: absolute;
+        width: min(6vmin, 28px);
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: transparent;
+        border: min(0.8vmin, 5px) solid #fff;
+      }
+      .leader-time {
+        position: absolute;
+        bottom: 18%;
+        color: #fff;
+        font-size: clamp(18px, 4.8vmin, 34px);
+        font-weight: 700;
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+      }
+      .sync-meta {
+        position: fixed;
+        bottom: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: rgba(255, 255, 255, 0.95);
+        font-size: clamp(12px, 2.5vmin, 16px);
+        text-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+        letter-spacing: 0.02em;
+      }
+      @media (max-width: 700px) {
+        .wrap {
+          margin-top: 14px;
+        }
+      }
+    </style>
+  </head>
+  <!-- TODO: Hm use some lightweight component lib like svelte or... something avoid the endless repetition -->
+  <body>
+    <main id="setup-view" class="wrap">
+      <div class="card">
+        <h1>Pulse Sync Demo</h1>
+        <div class="sync-indicator">
+          <div id="sync-dot" class="sync-dot"></div>
+          <span id="sync-label" class="sync-label"><strong>not locked</strong> - waiting for stable pulses</span>
+        </div>
+        <div class="row">
+          <div id="conn" class="pill">connected: no</div>
+          <div id="lock" class="pill">locked: no</div>
+          <div id="stable" class="pill">stable: 0</div>
+          <div id="err" class="pill">error: n/a</div>
+          <div id="bias" class="pill">bias: 0.00 ms</div>
+        </div>
+        <div class="controls" style="margin-top: 14px">
+          <div class="field" style="grid-column: 1 / -1">
+            <label for="ws-target">Server (host, host:port, host:port/path, ws(s)://, http(s)://)</label>
+            <input id="ws-target" type="text" value="localhost" placeholder="212.147.226.250 or ws://212.147.226.250:8080/ws" />
+            <div id="ws-target-preview" class="hint"></div>
+          </div>
+          <div class="field">
+            <label for="rotation-seconds">Rotation seconds</label>
+            <input id="rotation-seconds" type="number" />
+          </div>
+          <div class="field">
+            <label for="reset-beep-ms">Reset beep duration (ms)</label>
+            <input id="reset-beep-ms" type="number" />
+          </div>
+          <div class="field">
+            <label for="reset-beep-hz">Reset beep frequency (Hz)</label>
+            <input id="reset-beep-hz" type="number" />
+          </div>
+          <div class="field">
+            <label for="tick-ms">Tick duration (ms)</label>
+            <input id="tick-ms" type="number" />
+          </div>
+          <div class="field">
+            <label for="tick-hz">Tick frequency (Hz)</label>
+            <input id="tick-hz" type="number" />
+          </div>
+          <div class="field checkbox">
+            <label><input id="sticky-lock" type="checkbox" checked /> sticky lock (disconnect on lock)</label>
+          </div>
+          <div class="field checkbox">
+            <label><input id="audio-enabled" type="checkbox" checked /> sound enabled</label>
+          </div>
+        </div>
+        <p class="muted" style="margin: 12px 0 0">
+          When lock is reached, the demo switches to fullscreen sync mode and uses lock time as ground zero.
+        </p>
+      </div>
+
+      <div class="card">
+        <pre id="json">{}</pre>
+      </div>
+    </main>
+
+    <section id="sync-view" class="sync-view" hidden>
+      <div class="leader">
+        <div class="leader-ring"></div>
+        <div class="leader-ring inner"></div>
+        <div class="leader-crosshair">
+          <div class="leader-axis v"></div>
+          <div class="leader-axis h"></div>
+        </div>
+        <div id="leader-hand" class="leader-hand"></div>
+        <div class="leader-center"></div>
+        <div id="leader-time" class="leader-time">0.0s</div>
+      </div>
+      <div id="sync-meta" class="sync-meta"></div>
+    </section>
+
+    <script type="module">
+      //TODO: Everything below is terrible, make into some svelte component or at least make it less horrendous
+      import { PulseSyncClient } from "../src/pulse-sync.ts";
+
+      const connEl = document.getElementById("conn");
+      const lockEl = document.getElementById("lock");
+      const stableEl = document.getElementById("stable");
+      const errEl = document.getElementById("err");
+      const biasEl = document.getElementById("bias");
+      const jsonEl = document.getElementById("json");
+      const syncDot = document.getElementById("sync-dot");
+      const syncLabel = document.getElementById("sync-label");
+
+      const setupView = document.getElementById("setup-view");
+      const syncView = document.getElementById("sync-view");
+      const leaderHand = document.getElementById("leader-hand");
+      const leaderTime = document.getElementById("leader-time");
+      const syncMeta = document.getElementById("sync-meta");
+
+      const rotationSecondsInput = document.getElementById("rotation-seconds");
+      const resetBeepMsInput = document.getElementById("reset-beep-ms");
+      const resetBeepHzInput = document.getElementById("reset-beep-hz");
+      const tickMsInput = document.getElementById("tick-ms");
+      const tickHzInput = document.getElementById("tick-hz");
+      const wsTargetInput = document.getElementById("ws-target");
+      const wsTargetPreview = document.getElementById("ws-target-preview");
+      const stickyLockInput = document.getElementById("sticky-lock");
+      const audioEnabledInput = document.getElementById("audio-enabled");
+
+      const query = new URLSearchParams(location.search);
+      const numericFieldConfig = {
+        rotationSeconds: { input: rotationSecondsInput, min: 1, max: 120, step: 0.1, default: 1 },
+        resetBeepMs: { input: resetBeepMsInput, min: 10, max: 1000, step: 1, default: 300 },
+        resetBeepHz: { input: resetBeepHzInput, min: 100, max: 20000, step: 1, default: 4000 },
+        tickMs: { input: tickMsInput, min: 10, max: 1000, step: 1, default: 70 },
+        tickHz: { input: tickHzInput, min: 100, max: 20000, step: 1, default: 8000 },
+      };
+      const defaults = {
+        wsTarget: query.get("url") ?? import.meta.env.VITE_WS_URL ?? "localhost",
+        stickyLock: parseBool(query.get("stickyLock"), true),
+        soundEnabled: parseBool(query.get("soundEnabled"), true),
+      };
+      for (const [key, cfg] of Object.entries(numericFieldConfig)) {
+        defaults[key] = clampNumber(query.get(key), cfg.default, cfg.min, cfg.max);
+      }
+
+      for (const [key, cfg] of Object.entries(numericFieldConfig)) {
+        cfg.input.min = String(cfg.min);
+        cfg.input.max = String(cfg.max);
+        cfg.input.step = String(cfg.step);
+        cfg.input.value = String(defaults[key]);
+      }
+      wsTargetInput.value = String(defaults.wsTarget);
+      stickyLockInput.checked = defaults.stickyLock;
+      audioEnabledInput.checked = defaults.soundEnabled;
+
+      const runtime = {};
+      for (const key of Object.keys(numericFieldConfig)) {
+        runtime[key] = defaults[key];
+      }
+
+      let client = null;
+
+      let animationId = 0;
+      let enteredSyncView = false;
+      const ticksPerRotation = 4;
+      let nextTickIndex = 1;
+      let audioCtx = null;
+
+      const configInputs = Object.values(numericFieldConfig).map((cfg) => cfg.input);
+      for (const input of configInputs) {
+        input.addEventListener("change", readRuntimeConfig);
+      }
+      wsTargetInput.addEventListener("change", reconnectClientFromInput);
+      wsTargetInput.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          reconnectClientFromInput();
+        }
+      });
+      stickyLockInput.addEventListener("change", reconnectClientFromInput);
+
+      document.addEventListener("pointerdown", () => {
+        if (audioEnabledInput.checked) {
+          ensureAudioContext();
+        }
+      });
+
+      reconnectClientFromInput();
+
+      function readRuntimeConfig() {
+        for (const [key, cfg] of Object.entries(numericFieldConfig)) {
+          runtime[key] = clampNumber(cfg.input.value, cfg.default, cfg.min, cfg.max);
+        }
+      }
+
+      function enterSyncView() {
+        if (enteredSyncView) return;
+        if (!client) return;
+        enteredSyncView = true;
+        readRuntimeConfig();
+        setupView.hidden = true;
+        syncView.hidden = false;
+
+        const elapsedMs = client.elapsedSinceLockMs() ?? 0;
+        const cycleMs = runtime.rotationSeconds * 1000;
+        const tickIntervalMs = cycleMs / ticksPerRotation;
+        nextTickIndex = Math.floor(elapsedMs / tickIntervalMs) + 1;
+
+        syncView.style.backgroundColor = randomScreenColor();
+        animationId = requestAnimationFrame(renderSyncFrame);
+      }
+
+      function renderSyncFrame() {
+        if (!client) {
+          animationId = requestAnimationFrame(renderSyncFrame);
+          return;
+        }
+        const elapsedMs = client.elapsedSinceLockMs();
+        if (elapsedMs == null) {
+          animationId = requestAnimationFrame(renderSyncFrame);
+          return;
+        }
+
+        const cycleMs = runtime.rotationSeconds * 1000;
+        const tickIntervalMs = cycleMs / ticksPerRotation;
+
+        while (elapsedMs >= nextTickIndex * tickIntervalMs) {
+          const isRotationBoundary = nextTickIndex % ticksPerRotation === 0;
+          playTick();
+          if (isRotationBoundary) {
+            syncView.style.backgroundColor = randomScreenColor();
+            playResetBeep();
+          }
+          nextTickIndex += 1;
+        }
+
+        const phase = (elapsedMs % cycleMs) / cycleMs;
+        const angle = phase * 360;
+        leaderHand.style.transform = `translate(-50%, -100%) rotate(${angle.toFixed(3)}deg)`;
+        leaderTime.textContent = (elapsedMs / 1000).toFixed(1) + "s";
+        syncMeta.textContent =
+          `cycle ${runtime.rotationSeconds.toFixed(1)}s - ${ticksPerRotation} ticks/rotation - ` +
+          `${Math.floor(elapsedMs / 1000)}s since lock`;
+
+        animationId = requestAnimationFrame(renderSyncFrame);
+      }
+
+      function reconnectClientFromInput() {
+        if (enteredSyncView) return;
+        const parsed = parseWsTarget(wsTargetInput.value);
+        if (!parsed.ok) {
+          connEl.textContent = "connected: no";
+          connEl.className = "pill no";
+          setWsPreview(parsed.reason, true);
+          if (client) {
+            client.disconnect(false);
+            client = null;
+          }
+          return;
+        }
+
+        setWsPreview(parsed.url, false);
+        const nextClient = new PulseSyncClient({
+          url: parsed.url,
+          thresholdMs: 10,
+          requiredStablePulses: 3,
+          allowedUnstablePulses: 12,
+          beta: 0.005,
+          maxBiasCorrectionMs: 20,
+          stickyLock: stickyLockInput.checked,
+        });
+
+        if (client) {
+          client.disconnect(false);
+        }
+        client = nextClient;
+        bindClientEvents(nextClient);
+        nextClient.connect();
+      }
+
+      function bindClientEvents(boundClient) {
+        boundClient.addEventListener("status", (ev) => {
+          if (client !== boundClient) return;
+          const connected = !!ev.detail.connected;
+          connEl.textContent = "connected: " + (connected ? "yes" : "no");
+          connEl.className = "pill " + (connected ? "ok" : "no");
+        });
+
+        boundClient.addEventListener("lock", (ev) => {
+          if (client !== boundClient) return;
+          const locked = !!ev.detail.locked;
+          lockEl.textContent = "locked: " + (locked ? "yes" : "no");
+          lockEl.className = "pill " + (locked ? "ok" : "no");
+          syncDot.classList.toggle("locked", locked);
+          syncLabel.innerHTML = locked
+            ? "<strong>in sync</strong> - lock reached, switched to local clock"
+            : "<strong>not locked</strong> - waiting for stable pulses";
+
+          if (locked) {
+            enterSyncView();
+          }
+        });
+
+        boundClient.addEventListener("pulse", (ev) => {
+          if (client !== boundClient) return;
+          const d = ev.detail;
+          syncDot.classList.remove("flash");
+          void syncDot.offsetWidth;
+          syncDot.classList.add("flash");
+          stableEl.textContent = "stable: " + d.stableCount;
+          if (d.errorMs == null) {
+            errEl.textContent = "error: n/a";
+            errEl.className = "pill";
+          } else {
+            errEl.textContent = "error: " + d.errorMs.toFixed(2) + " ms";
+            errEl.className = "pill " + (Math.abs(d.errorMs) <= boundClient.thresholdMs ? "ok" : "no");
+          }
+          biasEl.textContent = "bias: " + d.biasMs.toFixed(2) + " ms";
+
+          const derivedNow = boundClient.serverNowMs();
+          jsonEl.textContent = JSON.stringify(
+            {
+              pulse: {
+                seq: d.seq,
+                ms: {
+                  now: d.serverNowMs,
+                  next: d.serverNextMs,
+                },
+                period_ms: d.periodMs,
+              },
+              client: {
+                predicted_next_arrival_mono_ms: boundClient.predictNextArrivalMonoMs(),
+                last_error_ms: d.errorMs,
+                bias_ms: d.biasMs,
+                stable_count: d.stableCount,
+                locked: d.locked,
+                sticky_lock: boundClient.stickyLock,
+                elapsed_since_lock_ms: d.elapsedSinceLockMs,
+                server_now_estimate_ms: derivedNow,
+              },
+            },
+            null,
+            2,
+          );
+        });
+      }
+
+      function setWsPreview(text, isError) {
+        wsTargetPreview.textContent = isError ? text : "resolved URL: " + text;
+        wsTargetPreview.className = "hint" + (isError ? " error" : "");
+      }
+
+      function parseWsTarget(raw) {
+        const input = String(raw ?? "").trim();
+        if (!input) {
+          return { ok: false, reason: "Server is required (host or URL)." };
+        }
+
+        const hasScheme = /^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(input);
+        let parsed;
+        try {
+          parsed = new URL(hasScheme ? input : `${defaultWsScheme()}://${input}`);
+        } catch {
+          return { ok: false, reason: "Invalid server format." };
+        }
+
+        if (parsed.protocol === "http:") parsed.protocol = "ws:";
+        if (parsed.protocol === "https:") parsed.protocol = "wss:";
+        if (parsed.protocol !== "ws:" && parsed.protocol !== "wss:") {
+          return { ok: false, reason: "Protocol must be ws://, wss://, http://, or https://." };
+        }
+        if (!parsed.hostname) {
+          return { ok: false, reason: "Host is missing." };
+        }
+
+        if (!hasScheme && !parsed.port) {
+          parsed.port = "8080";
+        }
+        if (!parsed.pathname || parsed.pathname === "/") {
+          parsed.pathname = "/ws";
+        }
+
+        return { ok: true, url: parsed.toString() };
+      }
+
+      function defaultWsScheme() {
+        return location.protocol === "https:" ? "wss" : "ws";
+      }
+
+      function parseBool(raw, fallback) {
+        if (raw == null) return fallback;
+        const v = raw.trim().toLowerCase();
+        if (v === "1" || v === "true" || v === "yes" || v === "on") return true;
+        if (v === "0" || v === "false" || v === "no" || v === "off") return false;
+        return fallback;
+      }
+
+      function clampNumber(raw, fallback, min, max) {
+        if (raw == null || String(raw).trim() === "") return fallback;
+        const n = Number(raw);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.min(max, Math.max(min, n));
+      }
+
+      function randomScreenColor() {
+        const hue = Math.floor(Math.random() * 360);
+        const sat = 60 + Math.floor(Math.random() * 30);
+        const light = 38 + Math.floor(Math.random() * 16);
+        return `hsl(${hue}deg ${sat}% ${light}%)`;
+      }
+
+      function ensureAudioContext() {
+        if (!audioCtx) {
+          audioCtx = new AudioContext();
+        }
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume();
+        }
+      }
+
+      function playResetBeep() {
+        playTone(runtime.resetBeepHz, runtime.resetBeepMs, 0.22, "sine");
+      }
+
+      function playTick() {
+        playTone(runtime.tickHz, runtime.tickMs, 0.18, "square");
+      }
+
+      function playTone(frequencyHz, durationMs, gainLevel, waveType) {
+        if (!audioEnabledInput.checked) return;
+        ensureAudioContext();
+        if (!audioCtx || audioCtx.state !== "running") return;
+
+        const now = audioCtx.currentTime;
+        const durationSec = durationMs / 1000;
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = waveType;
+        osc.frequency.setValueAtTime(frequencyHz, now);
+
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(gainLevel, now + 0.004);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + durationSec);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + durationSec + 0.02);
+      }
+
+      window.addEventListener("beforeunload", () => {
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+        }
+      });
+    </script>
+  </body>
+</html>
